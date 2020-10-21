@@ -9,18 +9,13 @@ model PedestrianAdapter
 
 import "Pedestrian.gaml"
 
-global {}
-
-experiment Simple type: gui {
-	list<People> get_people {
-		return list(People);
+experiment Micro type: gui {
+	list<people> get_people {
+		return list(people);
 	}
 	
-	list<Sidewalks> get_sidewalks {
-		return list(Sidewalks);
+	list<sidewalks> get_sidewalks {
+		return list(sidewalks);
 	}
-	
-	// If we redefine the output, i.e, a blank output, the displays in parent experiement dont show.
-	output {}
 }
 
