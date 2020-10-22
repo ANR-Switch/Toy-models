@@ -9,13 +9,23 @@ model PedestrianAdapter
 
 import "Pedestrian.gaml"
 
-experiment Micro type: gui {
-	list<people> get_people {
-		return list(people);
+experiment MicroPedestrian type: gui {
+	
+	list<person> get_people {
+		return list(person);
 	}
 	
-	list<sidewalks> get_sidewalks {
-		return list(sidewalks);
+	list<agent> get_person_guests {
+		return guest;
+	}
+	
+	action clear_person_guests {
+		guest <- [];
+	}
+	
+	action add_person_guest(agent m) {
+		if(m != nil and !dead(m)) {
+			add m to: guest;
+		}
 	}
 }
-
