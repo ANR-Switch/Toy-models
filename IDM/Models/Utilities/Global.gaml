@@ -15,6 +15,9 @@ global {
 	 * Computation data
 	 */
 	 
+	// First date
+	date first_date <- date([1970, 1, 1, 0, 0, 0]) const: true;
+	 
 	// Now
-	date now function: (starting_date + (machine_time / 1000) + 3600);
+	date now function: (first_date + (machine_time / 1000) + 3600);
 }
