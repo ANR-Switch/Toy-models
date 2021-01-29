@@ -10,7 +10,13 @@ model Car
 // Bloc global of the simulation
 global {
 	// Simulation step
-	float step <- 0.1#s;
+	float step <- 0.1;
+	
+	// Internal time step
+	float time_step <- min(0.1, step);
+	
+	// Number of steps
+	float step_count <- step / time_step;
 
 	// Cars generator rate (+1 => arithmetic error if value is 0)
 	int generate_frequency <- 100 update: rnd(100, 200) + 1;
@@ -58,6 +64,30 @@ global {
 	reflex realease_control when: !has_controlled_car and nb_car > 0 {
 		car[0].controlled <- false;
 	}
+	
+	// Get speed component from another (moving) agent
+	float get_dot_product_speed(agent a, point direction) {
+		
+		// Get data
+		point closest_target <- a get("destination");
+		float closest_speed_norm <- float(a get("speed"));
+		
+		// Compute
+		float res <- 0.0;
+		if(closest_target != nil and closest_speed_norm != nil and a.location != closest_target) {
+			float closest_distance <- a.location distance_to closest_target;
+			point closest_direction <- {(closest_target.x - a.location.x) / closest_distance, (closest_target.y - a.location.y) / closest_distance};
+			
+			res <- (direction * closest_direction) * closest_speed_norm;
+		}
+		
+		return res;
+	}
+	
+	// Get angle
+	float get_angle(point v1, point v2) {
+		return atan2(v2.y, v2.x) - atan2(v1.y, v1.x);
+	}
 }
 
 // Road species
@@ -71,64 +101,62 @@ species road {
 
 // Car species (with skill moving)
 species car skills: [moving] {
-	// If true the car is controlled by user
-	bool controlled <- false;
-	
 	// Reference of the followed car
 	agent next_moving_agent <- nil;
+
+	// Effect zone (following behavior)
+	geometry sensing_zone <- arc((speed / desired_speed) * (view * 2.0) + size, 0.0, 180);	
+
 	// Car target (is it depends of "right" variable)
 	point target;
+	
 	// View 
-	float view <- 3.0;
-	
-	// Effect zone (following behavior)
-	geometry sensing_zone <- rectangle({spacing + (speed ^ 2), (speed / desired_speed) * (view * 2.0) + width});
-	
+	float view <- 20.0;
+
+	// Size
+	float size <- 1.5;
+
 	// Distance to target
 	float distance;
+	
 	// Direction of the target
 	point direction;
-
-	// Linear params ***************************
-	float acc <- 0.0 #m / (#s ^ 2);
-	float reactivity <- 2.0;
-	// *****************************************
-
-	// Gipps params ****************************
-	float alpha <- 2.5;
-	float beta <- 0.025;
-	float gamma <- 0.5;
-	float spacing <- 2.0 #m;
-	float max_acc <- (0.1 #m / (#s ^ 2));
-	float size <- 4.0 #m;
-	float width <- 1.5 #m;
-	float desired_speed <- 5.56 #m / #s; // 20km/h
-	float reaction_time <- 1.5 #s;
-	// *****************************************
 	
-	// Argus size
-	geometry shape <- rectangle({size, width});
+	// Desired speed
+	float desired_speed <- 20 #m / #s;
+	
+	// Current acceleration
+	float acc <- 0.0 #m / (#s ^ 2);
+	
+	// Max acceleration
+	float max_acc <- (3.0 #m / (#s ^ 2));
+	
+	// Most sever break
+	float most_sever_break <- (11.0 #m / (#s ^ 2));
+	
+	// Reaction time
+	float reaction_time <- 1.0;
+	
+	// Reactivity
+	float reactivity <- 3.0;
+	
+	// Spacing between two transport
+	float spacing <- 1.5 #m;
+		
+	// Controlled
+	bool controlled <- false;
 
-	// Standard car, blue rectangle (1.5m x 4.0m argus)
-	aspect default {
-		// Draw car
-		draw shape color: #red; //rnd_color(255);
-		if(false) {
-			// Draw the effect zone used in "following behavior"
-			draw sensing_zone color: #darkcyan empty: true;
-			// Draw speed
-			draw line(location, location + (direction.y * speed)) color: #green;
-		}
-	}
+	// Argus size
+	geometry shape <- rectangle({4.0, size});
 
 	// Driver reflex
 	reflex drive {
-		// Get distance and direction
-		distance <- location distance_to target;
+		// Get distance to target and direction
+		distance <- location distance_to target;				
 		direction <- {(target.x - location.x) / distance, (target.y - location.y) / distance};
 		
 		// Get all detected agents
-		list<agent> all_agents <- list<agent>((car + guest)
+		list<agent> all_agents <- ((guest + car)
 			where (a: a != nil 						// Not nil
 				and !dead(a) 						// Not dead
 				and a != self						// Not itself
@@ -148,7 +176,7 @@ species car skills: [moving] {
 		float next_moving_agent_speed;
 		if(closest_agent != nil) {
 			// Get speed of the closest agent
-			float closest_speed <- get_dot_product_speed(closest_agent);
+			float closest_speed <- world.get_dot_product_speed(closest_agent, direction);
 			if(closest_speed > desired_speed) {
 				next_moving_agent <- nil;
 			} else {
@@ -159,57 +187,55 @@ species car skills: [moving] {
 			next_moving_agent <- nil;
 		}
 	
-		// If the car is controlled
+		// If there is something to follow
 		if (controlled) {
 			// Compute acceleration speed (Linear)
 			acc <- (reactivity / reaction_time) * (controlled_speed - speed);
-			speed <- speed + (acc * step);
+		} else if (next_moving_agent != nil and not dead(next_moving_agent) ) {
+			// Compute acceleration speed (Linear)
+			acc <- (reactivity / reaction_time) * (next_moving_agent_speed - speed);
 		} else {
-			// If there is something to follow
-			if (next_moving_agent != nil and not dead(next_moving_agent) ) {
-				// Compute acceleration speed (Linear)
-				acc <- (reactivity / reaction_time) * (next_moving_agent_speed - speed);
-				speed <- speed + (acc * step);
-			} else {
-				// Compute acceleration speed (Gipps)
-				speed <- speed + alpha * max_acc * reaction_time * (1.0 - (speed / desired_speed)) * sqrt(beta + (speed / desired_speed));
-			}
-
+			// Compute acceleration speed (Linear)
+			acc <- (reactivity / reaction_time) * (desired_speed - speed);
 		}
 		
-		// Move skill
-		do move heading: (self) towards (target) speed: speed;	
+		// Limitation
+		if(acc > max_acc) {
+			acc <- max_acc;
+		} else if(acc < -most_sever_break) {
+			acc <- -most_sever_break;
+		} 
 		
+		// Set speed
+		speed <- speed + (acc * time_step);
+		
+		// Move skill
+		do move heading: (self) towards (target) speed: speed;
+				
 		// Change "effect zone" with new location and speed
-		point loc <- {direction.x * ((spacing + (speed ^ 2) + size) / 2.0) + location.x, direction.y + location.y};
-		sensing_zone <- rectangle({spacing + (speed ^ 2), (speed / desired_speed) * (view * 2.0) + width}) at_location loc;
+		float angle <- world.get_angle({1.0, 0.0}, direction);
+		float radius <- (speed / desired_speed) * (view * 2.0) + spacing;
+		point rect_pos <- location + (direction * ((radius / 2.0) + 2.0));
+		sensing_zone <- rectangle(radius, radius / 2.0) at_location rect_pos rotated_by heading;
 	}
 
 	// Die if car is out of bound
-	reflex die when: (location.x > world_shape.width - (size / 2.0)) or (location.x < (size / 2.0)) {
+	reflex die when: (location distance_to target < 10.0) {
 		nb_car <- nb_car - 1;
 		do die();
 	}
 	
-	// Get speed composant
-	float get_dot_product_speed(agent a) {
-		
-		// Get data
-		point closest_target <- a get("destination");
-		float closest_speed_norm <- float(a get("speed"));
-		
-		// Compute
-		float res <- 0.0;
-		if(closest_target != nil and closest_speed_norm != nil and a.location != closest_target) {
-			float closest_distance <- a.location distance_to closest_target;
-			point closest_direction <- {(closest_target.x - a.location.x) / closest_distance, (closest_target.y - a.location.y) / closest_distance};
-			
-			res <- (direction * closest_direction) * closest_speed_norm;
+	// Standard car, blue rectangle (1.5m x 4.0m argus)
+	aspect default {
+		// Draw car
+		draw shape color: #red;
+		if true {
+			// Draw the effect zone used in "following behavior"
+			draw sensing_zone color: #darkcyan empty: true;
+			// Draw speed
+			draw line(location, location + (direction.y * speed)) color: #green;
 		}
-		
-		return res;
 	}
-	
 }
 
 // GUI Experiment

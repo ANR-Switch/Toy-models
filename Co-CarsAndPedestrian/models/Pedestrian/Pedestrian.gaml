@@ -115,10 +115,6 @@ species person skills: [moving] {
 					// Change the minimum effect zone to very thin
 					min_size <- 0.1;
 				}
-				if(time - start_blocked >= 40) {
-					// Force the crossing
-					forced <- true;
-				}
 			} else {
 				// Is not already blocked then get the time
 				start_blocked <- time;

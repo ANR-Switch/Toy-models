@@ -28,8 +28,7 @@ global {
 		create Pedestrians.MicroPedestrian using topology(world) with: [world_shape::pedestrian_world_shape] {}
 	}
 
-	reflex simulate_micro_models {
-		
+	reflex simulate_micro_models {		
 		// Get actual guest in car model and all pedestrian
 		list<agent> cars <- list<agent>(Cars.MicroCar accumulate each.get_cars());
 		list<agent> guest_pedestrians <- list<agent>(Pedestrians.MicroPedestrian accumulate each.get_person_guests());
@@ -74,7 +73,7 @@ global {
 			
 			// If there is 1 or more pedestrians
 			if(length(pedestrians) > 0) {
-				
+				 
 				// Insert all alive pedestrians
 				loop i from: 0 to: length(pedestrians) - 1 {
 					if (!dead(pedestrians at i)) {
@@ -89,7 +88,7 @@ global {
 		// Do one step of cars
 		ask (Cars.MicroCar) accumulate each.simulation {
 			do _step_;
-		}		
+		}
 	}
 }
 
