@@ -1,13 +1,6 @@
 # SwITCh-Toys
 Toy model used by SwITCh project.
 
-# Files
- - Models folder contains all models
- - Logs folder contains all logs
- - Parameters folder contains all inputs data (json files)
-    - Config.json: dataset location
-    - Agendas.json: fake agendas
-
 # Coding conventions
  - Action and parameter
  ```gaml 
