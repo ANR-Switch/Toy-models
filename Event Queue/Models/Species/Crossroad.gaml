@@ -4,8 +4,9 @@
 * Author: Jean-François Erdelyi
 * Tags: 
 */
-model IDM
+model EventQueue
 
+import "../Utilities/Global.gaml"
 import "Car.gaml"
 
 /** 
@@ -82,11 +83,18 @@ species Crossroad {
 	// Change phase periodically
 	reflex change_phase when: (type = "light") and ((cycle mod phase_frequency) = 0) {
 		accessible <- not accessible;
+		if accessible {
+			if out_road != nil {
+				ask out_road {
+					do add_waiting_agents(simulation_date);			
+				}
+			}
+		}
 	}
 
 	// Check accessibility
 	reflex accessibility_change when: (type = "generator") {
-		accessible <- length(get_closest_cars() where (each overlaps self)) <= 0;
+		accessible <- (length(get_closest_cars() where (each overlaps self)) <= 0) and (out_road.has_capacity());
 	}
 	
 	/**

@@ -4,7 +4,7 @@
 * Author: Jean-François Erdelyi
 * Tags: 
 */
-model IDM
+model Gipps
 
 import "Car.gaml"
 

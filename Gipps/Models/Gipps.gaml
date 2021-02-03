@@ -1,10 +1,10 @@
 /**
 * Name: World
-* Entry point IDM simulation.
+* Entry point Gipps simulation.
 * Author: Jean-François Erdelyi 
 * Tags: 
 */
-model IDM
+model Gipps
 
 import "Utilities/Global.gaml"
 import "Utilities/Logbook.gaml"
@@ -23,8 +23,8 @@ global skills: [logging] {
 	// Starting date
 	date starting_date <- date([1970, 1, 1, 0, 0, 0]);
 	
-	// Time stepƒ
-	float step <- 0.1 #s;
+	// Time step
+	float step <- 1.1 #s;
 	
 	// Random seed
 	float seed <- 424242.0;
@@ -126,20 +126,18 @@ global skills: [logging] {
  */
  
 // Main experiment
-experiment "IDM" type: gui {
+experiment "Gipps" type: gui {
 	// Car param
 	parameter "Max view length" var: car_max_view_length category: "Car";
 	parameter "Max view width" var: car_max_view_width category: "Car";
 	parameter "Draw sensing" var: car_draw_sensing category: "Car";
 	
 	// IDM param
-	parameter "Max speed" var: car_max_speed category: "IDM";
-	parameter "Size" var: car_size category: "IDM";
-	parameter "Max acceleration" var: car_max_acceleration category: "IDM";
-	parameter "Max break" var: car_max_break category: "IDM";
-	parameter "Reaction time" var: car_reaction_time category: "IDM";
-	parameter "Spacing" var: car_spacing category: "IDM";
-	parameter "Delta" var: car_delta category: "IDM";
+	parameter "Max speed" var: car_max_speed category: "Gipps";
+	parameter "Size" var: car_size category: "Gipps";
+	parameter "Max acceleration" var: car_max_acceleration category: "Gipps";
+	parameter "Max break" var: car_max_break category: "Gipps";
+	parameter "Spacing" var: car_spacing category: "Gipps";
 	
 	// Road param
 	parameter "Road max speed" var: road_max_speed category: "Road";

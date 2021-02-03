@@ -4,8 +4,9 @@
 * Author: Jean-François Erdelyi 
 * Tags: 
 */
-model IDM
+model EventQueue
 
+import "Utilities/EventManager.gaml"
 import "Utilities/Global.gaml"
 import "Utilities/Logbook.gaml"
 import "Species/Crossroad.gaml"
@@ -30,7 +31,7 @@ global skills: [logging] {
 	float seed <- 424242.0;
 	
 	// Cars generator rate (+1 => arithmetic error if value is 0)
-	int generate_frequency <- 50 update: rnd(0, 500) + 1;
+	int generate_frequency <- 50 update: rnd(0, 100) + 1;
 	
 	// The logbook
 	agent logbook;
@@ -98,6 +99,9 @@ global skills: [logging] {
 		create Logbook;
 		logbook <- Logbook[0];
 		
+		// Create event manager
+		create EventManager;
+		
 		// Create crossroads
 		write "Crossroad...";
 		do create_toy_crossroad(start_location);
@@ -111,6 +115,7 @@ global skills: [logging] {
 		do create_toy_road(0, 1);
 		do create_toy_road(1, 2);
 		do create_toy_road(2, 3);
+		do create_toy_fake_road(3, 0);
 		write "-> " + now;
 
 		// Create network	
@@ -126,23 +131,21 @@ global skills: [logging] {
  */
  
 // Main experiment
-experiment "IDM" type: gui {
+experiment "Event queue" type: gui {
 	// Car param
-	parameter "Max view length" var: car_max_view_length category: "Car";
-	parameter "Max view width" var: car_max_view_width category: "Car";
-	parameter "Draw sensing" var: car_draw_sensing category: "Car";
-	
-	// IDM param
-	parameter "Max speed" var: car_max_speed category: "IDM";
-	parameter "Size" var: car_size category: "IDM";
-	parameter "Max acceleration" var: car_max_acceleration category: "IDM";
-	parameter "Max break" var: car_max_break category: "IDM";
-	parameter "Reaction time" var: car_reaction_time category: "IDM";
-	parameter "Spacing" var: car_spacing category: "IDM";
-	parameter "Delta" var: car_delta category: "IDM";
+	parameter "Max speed" var: car_max_speed category: "Car";
+	parameter "Size" var: car_size category: "Car";
+	parameter "Spacing" var: car_spacing category: "Car";
+	parameter "Car animation" var: car_vehicule_animation category: "Car";
 	
 	// Road param
 	parameter "Road max speed" var: road_max_speed category: "Road";
+	parameter "Vehicule per minutes" var: road_vehicule_per_minutes category: "Road";
+	
+	// BPR equilibrium alpha
+	parameter "BPR alpha" var: road_alpha category: "BPR";
+	parameter "BPR beta" var: road_beta category: "BPR";
+	parameter "BPR gamma" var: road_gamma category: "BPR";
 	
 	// Logbook param
 	parameter "Logbook file path" var: logbook_file_path category: "Logbook";

@@ -4,7 +4,7 @@
 * Author: Jean-François Erdelyi
 * Tags: 
 */
-model IDM
+model Gipps
 
 import "../Utilities/Global.gaml"
 import "Road.gaml"
@@ -16,40 +16,34 @@ global {
 	/**
 	 * Car general param
 	 */
-	 
- 	// Field of view length
-	float car_max_view_length <- 200 #m;
-	
+
+	// Field of view length
+	float car_max_view_length <- 100 #m;
+
 	// Field of view width
 	float car_max_view_width <- 100 #m;
-	
+
 	// If true draw sensing zone
 	bool car_draw_sensing <- false;
-	
+
 	/**
 	 * IDM param
 	 */
-	 
- 	// Maximum speed for a car
+
+	// Maximum speed for a car
 	float car_max_speed <- 130.0 #km / #h;
-	
+
 	// Car length 
 	float car_size <- 4.0 #m;
-	
-	// Max acceleration
-	float car_max_acceleration <- (4.0 #m / (#s ^ 2));
-	
+
+	// Max velocity
+	float car_max_acceleration <- (1.0 #m / (#s ^ 2));
+
 	// Most sever break
-	float car_max_break <- (3.0 #m / (#s ^ 2));
-	
-	// Reaction time
-	float car_reaction_time <- 1.4 #s;
-	
+	float car_max_break <- (1.5 #m / (#s ^ 2));
+
 	// Spacing between two cars 
 	float car_spacing <- 2.0 #m;
-	
-	// Delta param
-	float car_delta <- 4.0;
 
 	/**
 	 * Factory
@@ -69,7 +63,7 @@ global {
 		ask car_road {
 			do join(values[0]);
 		}
-		
+
 	}
 
 }
@@ -88,14 +82,14 @@ species Car skills: [moving] {
 
 	// Current road
 	Road road;
-	
+
 	// Target
 	point final_target;
 
 	/**
 	 * Drawing data
 	 */
-	 
+
 	// Car width
 	float width <- 1.5 #m const: true;
 
@@ -114,9 +108,12 @@ species Car skills: [moving] {
 	/**
 	 * Model computation data
 	 */
+	 
+	// Reaction time
+	float reaction_time <- step #s;
 
-	// Current acceleration
-	float acceleration;
+	// Current velocity
+	float velocity;
 
 	// Desired speed 
 	float desired_speed;
@@ -133,24 +130,33 @@ species Car skills: [moving] {
 	/**
 	 * Computation data
 	 */
-
+	 
 	// Distance to target
-	float distance update: (topology(network) distance_between [self, target]) with_precision 4; 
-	
+	float distance update: (topology(network) distance_between [self, target]) with_precision 4;
+
 	// Distance to the final target
 	float final_distance update: (topology(network) distance_between [self, final_target]) with_precision 4;
-	
+
 	// Path lenght to the final location
 	float final_path_lenght;
 
 	// Location in the road
-	float location_in_road update: (road.length - distance);	
-	
+	float location_in_road update: (road.length - distance);
+
 	// Location in the road (to the end of the trip)
 	float final_location_in_road update: (final_path_lenght - final_distance);
 
 	// Remaining speed
 	float remaining_speed;
+
+	// New speed
+	float integrated_speed update: speed + (car_max_acceleration * reaction_time);
+
+	// sqrt value
+	float sqrt_value;
+
+	// Safe speed
+	float safe_speed;
 
 	// If true is the leader
 	bool is_leader;
@@ -180,23 +186,16 @@ species Car skills: [moving] {
 		if first(road.cars) = self and end_crossroad != nil {
 			if end_crossroad.accessible {
 				// If accessible -> as usual
-				do compute_acceleration();
+				do compute_speed();
 			} else {
 				// Else "follow" the crossroad
-				do compute_follower_acceleration(end_crossroad, 0.0);
+				do compute_follower_velocity(end_crossroad, 0.0);
 			}
 
 		} else {
-			do compute_acceleration();
+			do compute_speed();
 		}
 
-		// Goto and check target
-		if acceleration > car_max_acceleration {
-			acceleration <- car_max_acceleration;
-		} else if acceleration < -car_max_break {
-			acceleration <- -car_max_break;
-		}
-		speed <- speed + (acceleration * step);
 		do goto on: road target: target speed: speed;
 		do check_target();
 	}
@@ -205,43 +204,41 @@ species Car skills: [moving] {
 	 * Action
 	 */
 
-	// Compute acceleration
-	action compute_acceleration {
+	// Compute velocity
+	action compute_speed {
 		cars <- (Car where (each.location overlaps sensing_zone and each != self));
-		
+
 		// Get closest
 		closest <- last(cars);
 		is_leader <- closest = nil or dead(closest);
 		if (is_leader) {
-			do compute_leader_acceleration();
+			do compute_leader_velocity();
 		} else {
-			do compute_follower_acceleration(closest, closest.speed);
+			do compute_follower_velocity(closest, closest.speed);
 		}
 
 	}
 
-	// Compute acceleration of leader
-	action compute_leader_acceleration {
-		// Compute acceleration
-		acceleration <- car_max_acceleration * (1 - ((speed / desired_speed) ^ car_delta));
+	// Compute velocity of leader
+	action compute_leader_velocity {
+		// Compute velocity
+		speed <- min(integrated_speed, desired_speed);
 	}
 
-	// Compute acceleration of followers
-	action compute_follower_acceleration (agent leader, float leader_speed) {
+	// Compute velocity of followers
+	action compute_follower_velocity (agent leader, float leader_speed) {
 		// Compute deltas
-		delta_speed <- leader_speed - speed;
 		actual_gap <- (topology(network) distance_between [self, leader]) - car_size;
 
-		// Compute minimum gap
-		desired_minimum_gap <- car_spacing + (car_reaction_time * speed) - ((speed * delta_speed) / (2 * sqrt(car_max_acceleration * car_max_break)));
-
-		// Compute acceleration
-		if actual_gap != 0.0 {
-			acceleration <- car_max_acceleration * (1 - ((speed / desired_speed) ^ car_delta) - ((desired_minimum_gap / actual_gap) ^ 2));
-		} else {
-			acceleration <- car_max_acceleration * (1 - ((speed / desired_speed) ^ car_delta) - (desired_minimum_gap ^ 2));
+		// Safe speed
+		sqrt_value <- ((car_max_break ^ 2) * (reaction_time ^ 2)) + (leader_speed ^ 2) + ((2 * car_max_break) * (actual_gap - car_spacing));
+		safe_speed <- (-car_max_break * reaction_time);
+		if sqrt_value > 0.0 {
+			safe_speed <- safe_speed + sqrt(sqrt_value);
 		}
 
+		// New speed
+		speed <- min(integrated_speed, desired_speed, safe_speed);
 	}
 
 	// Check if the target is reached
@@ -257,18 +254,17 @@ species Car skills: [moving] {
 		}
 
 	}
-	
+
 	// Init value in the new road
-	action init_value(Road new_road) {
+	action init_value (Road new_road) {
 		road <- new_road;
 		location <- new_road.start_node.location;
 		target <- new_road.end_node.location;
 		desired_speed <- get_max_freeflow_speed(new_road);
 	}
 
-	
 	// Get max freeflow speed
-	float get_max_freeflow_speed(Road new_road) {
+	float get_max_freeflow_speed (Road new_road) {
 		return (min([car_max_speed, new_road.max_speed]) * 3.6) #km / #h;
 	}
 
