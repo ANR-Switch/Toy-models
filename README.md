@@ -2,6 +2,6 @@
 Toy models repository.
 
 - Co-Model (micro car and pedestrian) [WIP]
-- IDM
-- Gipps
-- Meso queue
+- Modified IDM
+- Simplified Gipps
+- Event-Driven Queue-Based
