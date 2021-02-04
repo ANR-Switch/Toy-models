@@ -4,7 +4,7 @@
 * Author: Jean-François Erdelyi
 * Tags: 
 */
-model EventQueue
+model IDMQueue
 
 import "../Utilities/EventManager.gaml"
 import "Crossroad.gaml"
@@ -61,6 +61,7 @@ global {
 		}
 
 	}
+
 }
 
 /**
@@ -77,7 +78,7 @@ species Road skills: [scheduling] {
 
 	// End crossroad node
 	Crossroad end_node;
-		
+	
 	/**
 	 * Computation data
 	 */
@@ -98,8 +99,8 @@ species Road skills: [scheduling] {
 	float current_capacity <- max_capacity min: 0.0 max: max_capacity;
 
 	// Jam percentage
-	float jam_percentage function: ((max_capacity - current_capacity) / max_capacity);
-
+	float jam_percentage update: ((max_capacity - current_capacity) / max_capacity);
+	
 	// Request time of each car
 	map<Car, date> request_times;
 	
@@ -108,13 +109,93 @@ species Road skills: [scheduling] {
 	
 	// Last out date
 	date last_out <- nil;
+	
+	// If true use micro model
+	bool micro_model <- false;
 
 	/**
 	 * Action
 	 */
 
 	// Join the road
-	action join (Car car, date request_time) {		
+	action join (Car car, date request_time) {
+		if micro_model {
+			do micro_join(car, request_time);
+		} else {
+			do meso_join(car, request_time);
+		}
+	}
+
+	// Leave the road
+	action leave (Car car, date request_time) {
+		if micro_model {
+			do micro_leave(car, request_time);
+		} else {
+			do meso_leave(car, request_time);
+		}
+	}
+
+	// Freeflow travel time
+	float compute_travel_time(float free_flow_travel_time) {
+		return free_flow_travel_time * (road_alpha + road_beta * (jam_percentage ^ road_gamma));			
+	}
+
+	/**
+	 * Micro action
+	 */
+	 
+	 // Join the road
+	action micro_join (Car car, date request_time) {
+		// Add car		
+		ask car {
+			// Change capacity
+			myself.current_capacity <- myself.current_capacity - car_size - car_spacing;
+
+			// Set values
+			do init_value(myself, request_time);
+			
+			// Remaining speed
+			do goto on: road target: target speed: remaining_speed;
+		}
+					
+		// Add car and time to travel
+		do add_request_time_car(car, (request_time + car.travel_time));
+	}
+
+	// Leave the road
+	action micro_leave (Car car, date request_time) {
+		// Remove car
+		do remove_car(car, request_time);
+
+		// Change capacity
+		ask car {
+			myself.current_capacity <- myself.current_capacity + car_size + car_spacing;
+			do tear_down(request_time);
+		}
+
+		// If there is another road
+		if end_node.out_road != nil {
+			// Join new road
+			ask end_node.out_road {
+				do join(car, request_time);
+			}
+
+		} else {
+			// Do die
+			ask car {
+				do die();
+			}
+
+		}
+
+	}
+
+	/**
+	 * Meso action
+	 */
+	 
+	// Join the road
+	action meso_join (Car car, date request_time) {		
 		ask car {
 			// Change capacity
 			myself.current_capacity <- myself.current_capacity - car_size - car_spacing;
@@ -128,15 +209,18 @@ species Road skills: [scheduling] {
 		
 		// If this is the first car
 		if length(cars) = 1 {
-			do check_first_agent(request_time);		
+			do check_and_schedule_first_agent(request_time);		
 		}
 	}
-
+	 
 	// Leave the road
-	action pop_and_leave (date request_time) {
+	action meso_leave (Car car, date request_time) {
 		
 		// Get first
-		Car car <- first(cars);		
+		if first(cars) != car {
+			write "Something wrong the car must be the first in the road";
+		}
+		
 		Road next_road <- end_node.out_road;
 		
 		// If there is another road
@@ -189,28 +273,28 @@ species Road skills: [scheduling] {
 	// End travel
 	action end_travel(Car car, date request_time) {
 		if last_out = nil {
-			do pop_and_leave(request_time);
+			do meso_leave(car, request_time);
 		} else {
 			float delta <- milliseconds_between(last_out, request_time) / 1000.0;
 			if delta >= outflow_duration {
-				do pop_and_leave(request_time);
+				do meso_leave(car, request_time);
 			} else {
 				// If the car has crossed the road
 				date signal_date <- request_time + (outflow_duration - delta);
 				
 				// If the signal date is equals to the actual step date then execute it directly
 				if signal_date = (starting_date + time) {
-					do pop_and_leave(request_time + (outflow_duration - delta));
+					do meso_leave(car, request_time + (outflow_duration - delta));
 				} else {
-					do later the_action: pop_and_leave_signal at: request_time + (outflow_duration - delta) refer_to: car;					
+					do later the_action: meso_leave_signal at: request_time + (outflow_duration - delta) refer_to: car;					
 				}
 			}
 		}		
 	}
 
 	// Leave signal
-	action pop_and_leave_signal {
-		do pop_and_leave(event_date);
+	action meso_leave_signal {
+		do meso_leave(refer_to as Car, event_date);
 	}
 	
 	// End signal
@@ -220,7 +304,7 @@ species Road skills: [scheduling] {
 	
 	// Check waiting agents
 	action check_waiting(date request_time) {
-		do check_first_agent(request_time);
+		do check_and_schedule_first_agent(request_time);
 		if length(waiting_cars) > 0 {
 			do add_waiting_agents(request_time);
 		}
@@ -228,6 +312,23 @@ species Road skills: [scheduling] {
 	
 	// Check first car
 	action check_first_agent (date request_time) {
+		if not empty(cars) {
+			Car car <- first(cars);
+			date end_road_date; 
+			if request_time > request_times[car] {
+				end_road_date <- request_time;
+			} else {
+				end_road_date <- request_times[car];
+			}
+			
+			if end_road_date = request_time {
+				do end_travel(car, end_road_date);	
+			}
+		}
+	}
+	
+	// Check first car
+	action check_and_schedule_first_agent (date request_time) {
 		if not empty(cars) {
 			Car car <- first(cars);
 			date end_road_date; 
@@ -254,16 +355,16 @@ species Road skills: [scheduling] {
 		
 			// Leave previous road
 			ask start_node.in_road {
-				do pop_and_leave(request_time);
+				do meso_leave(car, request_time);
 			}
 		}
 	}
-	
+		
 	// Just the current capacity
 	bool has_capacity {
 		return (current_capacity >= car_size + car_spacing); 
 	}
-	
+
 	// Notify as in road
 	action in_notify(date request_time) {
 		if end_node.out_road = nil {
@@ -273,14 +374,11 @@ species Road skills: [scheduling] {
 	
 	// Notify as out road
 	action out_notify(date request_time) {
-		do add_waiting_agents(request_time);
+		if not micro_model {
+			do add_waiting_agents(request_time);
+		}
 	}
 	
-	// Freeflow travel time
-	float compute_travel_time(float free_flow_travel_time) {
-		return free_flow_travel_time * (road_alpha + road_beta * (jam_percentage ^ road_gamma));			
-	}
-
 	/**
 	 * Handler action
 	 */
@@ -309,12 +407,22 @@ species Road skills: [scheduling] {
 		return first;
 	}
 	
+	// Remove specific car
+	action remove_car (Car car, date request_time) {
+		Car first <- pop(cars);
+		if first != car {
+			write "Something wrong in remove car";
+		}
+		remove key: car from: request_times;
+		last_out <- request_time;
+	}
+	
 	// Remove car
 	action pop_waiting_car {
 		Car first <- pop(waiting_cars);
 		remove key: first from: request_times;
 	}
-
+	
 	/**
 	 * Aspect
 	 */

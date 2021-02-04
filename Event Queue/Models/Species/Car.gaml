@@ -76,9 +76,6 @@ species Car skills: [moving] {
 	 
 	// Car width
 	float width <- 1.5 #m const: true;
-	
-	// Heading angle
-	//float heading update: angle_between({location.x + 1.0, location.y }, location, target);
 
 	// Default shape
 	geometry default_shape update: rectangle(car_size, width);
@@ -118,10 +115,7 @@ species Car skills: [moving] {
 	date entry_time <- nil;
 	
 	// Theorical speed
-	float max_speed <- 0.0;
-	
-	// Computed speed
-	float speed <- 0.0;
+	float desired_speed <- 0.0;
 	
 	/**
 	 * Reflex
@@ -129,7 +123,7 @@ species Car skills: [moving] {
 	 
 	 // Goto
 	 reflex move when: car_vehicule_animation {
-		do goto on: road target: target speed: max_speed;
+		do goto on: road target: target speed: desired_speed;
 	 }
 	
 	/**
@@ -139,23 +133,24 @@ species Car skills: [moving] {
 	// Init value in the new road
 	action init_value(Road new_road, date request_time) {
 		road <- new_road;
-		location <- new_road.start_node.location;
+		location <- new_road.location;
 		target <- new_road.end_node.location;
+		
 		entry_time <- request_time;
-		ask new_road {
-			do compute_travel_time(myself);			
-		}
+		desired_speed <- get_max_freeflow_speed();
+		free_flow_travel_time <- (new_road.length / desired_speed);
+		travel_time <- new_road.compute_travel_time(free_flow_travel_time);
 	}
 	
 	// Init value in the new road
 	action tear_down(date request_time) {
 		float seconds <- milliseconds_between(entry_time, request_time) / 1000.0;
-		speed <- (road.length / seconds) #m / #s;
+		speed <- ((road.length / seconds) * 3.6) #km / #h;
 	}
 	
 	// Get max freeflow speed
-	float get_max_freeflow_speed(Road new_road) {
-		return (min([car_max_speed, new_road.max_speed]) * 3.6) #km / #h;
+	float get_max_freeflow_speed {
+		return (min([car_max_speed, road_max_speed]) * 3.6) #km / #h;
 	}
 
 	/**

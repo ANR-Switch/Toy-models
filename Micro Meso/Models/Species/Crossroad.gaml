@@ -4,9 +4,8 @@
 * Author: Jean-François Erdelyi
 * Tags: 
 */
-model EventQueue
+model IDMQueue
 
-import "../Utilities/Global.gaml"
 import "Car.gaml"
 
 /** 
@@ -83,6 +82,7 @@ species Crossroad {
 	// Change phase periodically
 	reflex change_phase when: (type = "light") and ((cycle mod phase_frequency) = 0) {
 		accessible <- not accessible;
+		
 		if accessible {
 			if in_road != nil {
 				ask in_road {
@@ -99,18 +99,7 @@ species Crossroad {
 
 	// Check accessibility
 	reflex accessibility_change when: (type = "generator") {
-		accessible <- (length(get_closest_cars() where (each overlaps self)) <= 0) and (out_road.has_capacity());
-	}
-	
-	// Get accessibility
-	bool get_accessibility {
-		if out_road != nil {
-			ask out_road {
-				return has_capacity() and myself.accessible;
-			}
-		} else {
-			return accessible;
-		}
+		accessible <- length(get_closest_cars() where (each overlaps self)) <= 0;
 	}
 	
 	/**
@@ -127,6 +116,17 @@ species Crossroad {
 			add out_road.cars to: cars all: true;
 		}
 		return cars;
+	}
+	
+	// Get accessibility
+	bool get_accessibility {
+		if out_road != nil {
+			ask out_road {
+				return has_capacity() and myself.accessible;
+			}
+		} else {
+			return accessible;
+		}
 	}
 
 	/**

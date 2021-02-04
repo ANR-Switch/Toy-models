@@ -4,7 +4,7 @@
 * Author: Jean-François Erdelyi
 * Tags: 
 */
-model IDM
+model IDMQueue
 
 import "../Utilities/Global.gaml"
 import "Road.gaml"
@@ -49,7 +49,7 @@ global {
 	float car_spacing <- 2.0 #m;
 	
 	// Delta param
-	float car_delta <- 4.0;
+	float car_delta <- 4.0;	
 
 	/**
 	 * Factory
@@ -67,7 +67,7 @@ global {
 
 		// Join the road
 		ask car_road {
-			do join(values[0]);
+			do join(values[0], simulation_date);
 		}
 		
 	}
@@ -135,7 +135,7 @@ species Car skills: [moving] {
 	 */
 
 	// Distance to target
-	float distance update: (topology(network) distance_between [self, target]) with_precision 4; 
+	float distance function: (topology(network) distance_between [self, target]) with_precision 4; 
 	
 	// Distance to the final target
 	float final_distance update: (topology(network) distance_between [self, final_target]) with_precision 4;
@@ -152,11 +152,26 @@ species Car skills: [moving] {
 	// Remaining speed
 	float remaining_speed;
 
+	// Freeflow travel time
+	float free_flow_travel_time;
+	 
+	// Freeflow travel time after BPR
+	float travel_time;
+	
+	// computed speed
+	float computed_speed;
+
+	// If ture use micro model
+	bool micro_model <- false;
+
 	// If true is the leader
 	bool is_leader;
 
 	// Target
 	point target;
+
+	// Entry time
+	date entry_time <- nil;
 
 	// List of car in the sensing
 	list<Car> cars;
@@ -172,17 +187,20 @@ species Car skills: [moving] {
 	 */
 
 	// Reaction drive
-	reflex compute_drive {
+	reflex compute_drive when: micro_model {
 		// Get end crossroad
 		end_crossroad <- road.end_node.location overlaps sensing_zone ? road.end_node : nil;
 
 		// Check if is the first car of this road
 		if first(road.cars) = self and end_crossroad != nil {
-			if end_crossroad.accessible {
+			bool joinable <- end_crossroad.get_accessibility();
+			
+			if joinable {
 				// If accessible -> as usual
 				do compute_acceleration();
 			} else {
 				// Else "follow" the crossroad
+				do get_closest_car();
 				do compute_follower_acceleration(end_crossroad, 0.0);
 			}
 
@@ -198,22 +216,27 @@ species Car skills: [moving] {
 		}
 		speed <- speed + (acceleration * step);
 		do goto on: road target: target speed: speed;
-		do check_target();
+		do check_target(simulation_date);
 	}
 
 	/**
 	 * Action
 	 */
-
-	// Compute acceleration
-	action compute_acceleration {
-		ask road.end_node {
+	 
+	// Get closest car
+	action get_closest_car {
+ 		ask road.end_node {
 			myself.cars <- (get_closest_cars() where (each.location overlaps myself.sensing_zone and each != myself));			
 		}
 			
 		// Get closest
 		closest <- cars closest_to self;
 		is_leader <- closest = nil or dead(closest);
+	 }
+
+	// Compute acceleration
+	action compute_acceleration {
+		do get_closest_car();
 		if (is_leader) {
 			do compute_leader_acceleration();
 		} else {
@@ -247,13 +270,12 @@ species Car skills: [moving] {
 	}
 
 	// Check if the target is reached
-	action check_target {
+	action check_target(date request_time) {
 		// Get the distance between the car and the target
 		if distance <= 0.0 {
 			// Leave road
 			ask road {
-				myself.remaining_speed <- myself.speed - myself.real_speed;
-				do leave(myself);
+				do leave(myself, request_time);
 			}
 
 		}
@@ -261,17 +283,31 @@ species Car skills: [moving] {
 	}
 	
 	// Init value in the new road
-	action init_value(Road new_road) {
+	action init_value(Road new_road, date request_time) {
 		road <- new_road;
-		location <- new_road.start_node.location;
+		if micro_model {
+			location <- new_road.start_node.location;			
+		} else {
+			location <- new_road.location;
+		}
 		target <- new_road.end_node.location;
-		desired_speed <- get_max_freeflow_speed(new_road);
+		desired_speed <- get_max_freeflow_speed();
+		
+		entry_time <- request_time;
+		free_flow_travel_time <- (new_road.length / desired_speed);
+		travel_time <- new_road.compute_travel_time(free_flow_travel_time);
 	}
-
+	
+	// Init value in the new road
+	action tear_down(date request_time) {
+		remaining_speed <- speed - real_speed;
+		float seconds <- milliseconds_between(entry_time, request_time) / 1000.0;
+		computed_speed <- ((road.length / seconds) * 3.6) #km / #h;
+	}
 	
 	// Get max freeflow speed
-	float get_max_freeflow_speed(Road new_road) {
-		return (min([car_max_speed, new_road.max_speed]) * 3.6) #km / #h;
+	float get_max_freeflow_speed {
+		return (min([car_max_speed, road_max_speed]) * 3.6) #km / #h;
 	}
 
 	/**
