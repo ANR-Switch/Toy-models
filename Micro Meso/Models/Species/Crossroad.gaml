@@ -57,7 +57,7 @@ species Crossroad {
 	 */
 
 	// Shape
-	geometry shape <- circle(3);
+	geometry shape <- circle((car_size / 2.0) + car_spacing);
 
 	// Color
 	rgb color function: accessible ? #green : #red;
@@ -65,6 +65,9 @@ species Crossroad {
 	/**
 	 * Computation data
 	 */
+	 
+	// Crossroad coupling
+	string coupling_type <- "none-none" among: ["none-none", "meso-none", "none-meso", "micro-none", "none-micro", "micro-micro", "meso-micro", "micro-meso", "meso-meso"];
 
 	// In road
 	Road in_road;
@@ -79,10 +82,13 @@ species Crossroad {
 	 * Reflex
 	 */
 
-	// Change phase periodically
-	reflex change_phase when: (type = "light") and ((cycle mod phase_frequency) = 0) {
+	// Check accessibility for light
+	reflex change_phase when: (type = "light") and ((cycle mod phase_frequency) = 0) and (cycle != 0) {
 		accessible <- not accessible;
-		
+	}
+	
+	// Notify roads
+	reflex notify_roads when: (type = "light") {
 		if accessible {
 			if in_road != nil {
 				ask in_road {
@@ -95,11 +101,6 @@ species Crossroad {
 				}
 			}
 		}
-	}
-
-	// Check accessibility
-	reflex accessibility_change when: (type = "generator") {
-		accessible <- length(get_closest_cars() where (each overlaps self)) <= 0;
 	}
 	
 	/**
@@ -127,6 +128,34 @@ species Crossroad {
 		} else {
 			return accessible;
 		}
+	}
+	
+	// Set crossroad
+	action setup {
+		string type_string <- "";
+		
+		if in_road != nil {
+			if in_road.micro_model {
+				type_string <- "micro-";
+			} else {
+				type_string <- "meso-";
+			}
+		} else {
+			type_string <- "none-";
+		}
+		
+		if out_road != nil {
+			if out_road.micro_model {
+				type_string <- type_string + "micro";
+			} else {
+				type_string <- type_string + "meso";
+				
+			}
+		} else {
+			type_string <- type_string + "none";
+		}
+		
+		coupling_type <- type_string;
 	}
 
 	/**

@@ -25,9 +25,6 @@ global {
 	// If true, then write data
 	bool logbook_write_data <- false;
 	
-	// If true, then log data
-	bool logbook_activated <- false;
-	
 	// If true, then write data	when the cycle is reached
 	bool logbook_cycle_activated <- false;
 	

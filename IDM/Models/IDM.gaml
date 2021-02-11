@@ -7,7 +7,7 @@
 model IDM
 
 import "Utilities/Global.gaml"
-import "Utilities/Logbook.gaml"
+//import "Utilities/Logbook.gaml"
 import "Species/Crossroad.gaml"
 import "Species/Road.gaml"
 import "Species/Car.gaml"
@@ -73,7 +73,7 @@ global skills: [logging] {
 	}
 
 	// Log data
-	reflex log_data when: logbook_activated {		
+	/*reflex log_data when: logbook_activated {		
 		// For each road
 		loop road over: Road {			
 			// For each car
@@ -86,7 +86,7 @@ global skills: [logging] {
 				
 			}				
 		}
-	}
+	}*/
 	
 	/**
 	 * Init
@@ -95,8 +95,8 @@ global skills: [logging] {
 	// Init the model
 	init {
 		// Create logbook
-		create Logbook;
-		logbook <- Logbook[0];
+		/*create Logbook;
+		logbook <- Logbook[0];*/
 		
 		// Create crossroads
 		write "Crossroad...";
@@ -117,6 +117,11 @@ global skills: [logging] {
 		write "Graph...";
 		full_network <- as_edge_graph(Road, 1);
 		write "-> " + now;
+		
+		// The famous WTF problem
+		create Car {
+			do die();
+		}
 	}
 
 }
@@ -145,12 +150,12 @@ experiment "IDM" type: gui {
 	parameter "Road max speed" var: road_max_speed category: "Road";
 	
 	// Logbook param
-	parameter "Logbook file path" var: logbook_file_path category: "Logbook";
+	/*parameter "Logbook file path" var: logbook_file_path category: "Logbook";
 	parameter "Logbook cycle threshold" var: logbook_cycle_threshold category: "Logbook";
 	parameter "Logbook force write" var: logbook_write_data category: "Logbook";
 	parameter "Logbook activated" var: logbook_activated category: "Logbook";
 	parameter "Logbook cyclic activated" var: logbook_cycle_activated category: "Logbook";
-	parameter "Logbook flush" var: logbook_flush category: "Logbook";
+	parameter "Logbook flush" var: logbook_flush category: "Logbook";*/
 	
 	output {
 		display main_window type: opengl {

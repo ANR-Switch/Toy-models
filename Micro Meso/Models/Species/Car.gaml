@@ -6,6 +6,8 @@
 */
 model IDMQueue
 
+import "../Utilities/Logger.gaml"
+
 import "../Utilities/Global.gaml"
 import "Road.gaml"
 
@@ -13,43 +15,43 @@ import "Road.gaml"
  * General data
  */
 global {
-	/**
+/**
 	 * Car general param
 	 */
-	 
- 	// Field of view length
+
+	// Field of view length
 	float car_max_view_length <- 200 #m;
-	
+
 	// Field of view width
 	float car_max_view_width <- 100 #m;
-	
+
 	// If true draw sensing zone
 	bool car_draw_sensing <- false;
-	
+
 	/**
 	 * IDM param
 	 */
-	 
- 	// Maximum speed for a car
+
+	// Maximum speed for a car
 	float car_max_speed <- 130.0 #km / #h;
-	
+
 	// Car length 
 	float car_size <- 4.0 #m;
-	
+
 	// Max acceleration
 	float car_max_acceleration <- (4.0 #m / (#s ^ 2));
-	
+
 	// Most sever break
 	float car_max_break <- (3.0 #m / (#s ^ 2));
-	
+
 	// Reaction time
 	float car_reaction_time <- 1.4 #s;
-	
+
 	// Spacing between two cars 
 	float car_spacing <- 2.0 #m;
-	
+
 	// Delta param
-	float car_delta <- 4.0;	
+	float car_delta <- 4.0;
 
 	/**
 	 * Factory
@@ -62,14 +64,14 @@ global {
 			network <- car_graph;
 			road <- car_road;
 			final_target <- car_final_target;
-			final_path_lenght <- (topology(network) distance_between [car_road.start_node, final_target]);
+			final_path_lenght <- car_road.start_node distance_to final_target using topology(network);
 		}
 
 		// Join the road
 		ask car_road {
 			do join(values[0], simulation_date);
 		}
-		
+
 	}
 
 }
@@ -88,14 +90,14 @@ species Car skills: [moving] {
 
 	// Current road
 	Road road;
-	
+
 	// Target
 	point final_target;
 
 	/**
 	 * Drawing data
 	 */
-	 
+
 	// Car width
 	float width <- 1.5 #m const: true;
 
@@ -116,7 +118,7 @@ species Car skills: [moving] {
 	 */
 
 	// Current acceleration
-	float acceleration;
+	float acceleration min: -car_max_break max: car_max_acceleration;
 
 	// Desired speed 
 	float desired_speed;
@@ -135,17 +137,17 @@ species Car skills: [moving] {
 	 */
 
 	// Distance to target
-	float distance function: (topology(network) distance_between [self, target]) with_precision 4; 
-	
+	float distance function: self distance_to target using topology(network) with_precision 4;
+
 	// Distance to the final target
-	float final_distance update: (topology(network) distance_between [self, final_target]) with_precision 4;
-	
+	float final_distance update: self distance_to final_target using topology(network) with_precision 4;
+
 	// Path lenght to the final location
 	float final_path_lenght;
 
 	// Location in the road
-	float location_in_road update: (road.length - distance);	
-	
+	float location_in_road update: (road.length - distance);
+
 	// Location in the road (to the end of the trip)
 	float final_location_in_road update: (final_path_lenght - final_distance);
 
@@ -154,12 +156,12 @@ species Car skills: [moving] {
 
 	// Freeflow travel time
 	float free_flow_travel_time;
-	 
+
 	// Freeflow travel time after BPR
 	float travel_time;
-	
+
 	// computed speed
-	float computed_speed;
+	float computed_speed <- 0.0;
 
 	// If ture use micro model
 	bool micro_model <- false;
@@ -188,18 +190,17 @@ species Car skills: [moving] {
 
 	// Reaction drive
 	reflex compute_drive when: micro_model {
-		// Get end crossroad
+	// Get end crossroad
 		end_crossroad <- road.end_node.location overlaps sensing_zone ? road.end_node : nil;
 
 		// Check if is the first car of this road
 		if first(road.cars) = self and end_crossroad != nil {
 			bool joinable <- end_crossroad.get_accessibility();
-			
 			if joinable {
-				// If accessible -> as usual
+			// If accessible -> as usual
 				do compute_acceleration();
 			} else {
-				// Else "follow" the crossroad
+			// Else "follow" the crossroad
 				do get_closest_car();
 				do compute_follower_acceleration(end_crossroad, 0.0);
 			}
@@ -209,11 +210,6 @@ species Car skills: [moving] {
 		}
 
 		// Goto and check target
-		if acceleration > car_max_acceleration {
-			acceleration <- car_max_acceleration;
-		} else if acceleration < -car_max_break {
-			acceleration <- -car_max_break;
-		}
 		speed <- speed + (acceleration * step);
 		do goto on: road target: target speed: speed;
 		do check_target(simulation_date);
@@ -222,17 +218,17 @@ species Car skills: [moving] {
 	/**
 	 * Action
 	 */
-	 
+
 	// Get closest car
 	action get_closest_car {
- 		ask road.end_node {
-			myself.cars <- (get_closest_cars() where (each.location overlaps myself.sensing_zone and each != myself));			
+		ask road.end_node {
+			myself.cars <- (get_closest_cars() where (each.location overlaps myself.sensing_zone and each != myself and each.micro_model));
 		}
-			
+
 		// Get closest
-		closest <- cars closest_to self;
+		closest <- (cars closest_to self using topology(network));
 		is_leader <- closest = nil or dead(closest);
-	 }
+	}
 
 	// Compute acceleration
 	action compute_acceleration {
@@ -247,7 +243,7 @@ species Car skills: [moving] {
 
 	// Compute acceleration of leader
 	action compute_leader_acceleration {
-		// Compute acceleration
+	// Compute acceleration
 		acceleration <- car_max_acceleration * (1 - ((speed / desired_speed) ^ car_delta));
 	}
 
@@ -255,7 +251,7 @@ species Car skills: [moving] {
 	action compute_follower_acceleration (agent leader, float leader_speed) {
 		// Compute deltas
 		delta_speed <- leader_speed - speed;
-		actual_gap <- (topology(network) distance_between [self, leader]) - car_size;
+		actual_gap <- (self distance_to leader using topology(network)) - car_size;
 
 		// Compute minimum gap
 		desired_minimum_gap <- car_spacing + (car_reaction_time * speed) - ((speed * delta_speed) / (2 * sqrt(car_max_acceleration * car_max_break)));
@@ -270,7 +266,7 @@ species Car skills: [moving] {
 	}
 
 	// Check if the target is reached
-	action check_target(date request_time) {
+	action check_target (date request_time) {
 		// Get the distance between the car and the target
 		if distance <= 0.0 {
 			// Leave road
@@ -281,30 +277,48 @@ species Car skills: [moving] {
 		}
 
 	}
-	
+
 	// Init value in the new road
-	action init_value(Road new_road, date request_time) {
+	action init_value (Road new_road, date request_time) {
 		road <- new_road;
-		if micro_model {
-			location <- new_road.start_node.location;			
-		} else {
-			location <- new_road.location;
-		}
-		target <- new_road.end_node.location;
+		micro_model <- road.micro_model;
+		location <- road.start_node.location;
+		target <- road.end_node.location;
 		desired_speed <- get_max_freeflow_speed();
-		
 		entry_time <- request_time;
-		free_flow_travel_time <- (new_road.length / desired_speed);
-		travel_time <- new_road.compute_travel_time(free_flow_travel_time);
+		free_flow_travel_time <- (road.length / desired_speed);
+		travel_time <- road.compute_travel_time(free_flow_travel_time);
+		if micro_model and road.start_node.coupling_type = "meso-micro" {
+			// Set speed
+			if length(road.cars) > 0 {
+				// From closest
+				closest <- last(road.cars);
+				speed <- closest.speed;
+			} else {
+				// From computed speed (see tear_down action)
+				speed <- computed_speed;
+			}
+
+		} else if not micro_model {
+			// Theorical speed
+			speed <- ((road.length / travel_time) * 3.6) #km / #h;
+		}
 	}
-	
+
 	// Init value in the new road
-	action tear_down(date request_time) {
-		remaining_speed <- speed - real_speed;
+	action tear_down (date request_time) {
+		if micro_model {
+			remaining_speed <- speed - real_speed;			
+		} else {
+			remaining_speed <- 0.0;			
+		}
 		float seconds <- milliseconds_between(entry_time, request_time) / 1000.0;
 		computed_speed <- ((road.length / seconds) * 3.6) #km / #h;
+		ask Logger[0] {
+			do log_data(myself.name, "speed", string(request_time), string(myself.computed_speed));	
+		}
 	}
-	
+
 	// Get max freeflow speed
 	float get_max_freeflow_speed {
 		return (min([car_max_speed, road_max_speed]) * 3.6) #km / #h;

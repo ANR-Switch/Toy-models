@@ -22,7 +22,7 @@ global {
 	float road_max_speed <- 50.0 #km / #h;
 	
 	// Vehicule per minutes
-	int road_vehicule_per_minutes <- 600;
+	int road_vehicule_per_minutes <- 30;
 	
 	// BPR equilibrium alpha
 	float road_alpha <- 1.0;
@@ -38,7 +38,7 @@ global {
 	 */
 
 	// Create new road
-	action create_toy_road (int road_start_node_index, int road_end_node_index) {
+	action create_toy_road (int road_start_node_index, int road_end_node_index, bool road_micro_model) {
 		create Road {
 			// Get start crossroad
 			start_node <- Crossroad[road_start_node_index];
@@ -58,6 +58,7 @@ global {
 			max_capacity <- shape.perimeter;
 			current_capacity <- max_capacity;
 			event_manager <- EventManager[0];
+			micro_model <- road_micro_model;
 		}
 
 	}
@@ -110,8 +111,25 @@ species Road skills: [scheduling] {
 	// Last out date
 	date last_out <- nil;
 	
+	// True car is corssing
+	bool car_is_crossing function: length(cars where (each overlaps start_node)) > 0;
+	
 	// If true use micro model
 	bool micro_model <- false;
+	
+	/**
+	 * Reflex 
+	 */
+	 
+	 // Check meso locations
+	 reflex check_meso_location when: not micro_model {
+	 	loop car over: cars {
+			if simulation_date > request_times[car] {
+				car.location <- end_node.location;		
+			}	
+		}
+	 }
+	 
 
 	/**
 	 * Action
@@ -145,21 +163,23 @@ species Road skills: [scheduling] {
 	 */
 	 
 	 // Join the road
-	action micro_join (Car car, date request_time) {
-		// Add car		
+	action micro_join (Car car, date request_time) {					
 		ask car {
 			// Change capacity
 			myself.current_capacity <- myself.current_capacity - car_size - car_spacing;
-
+			
 			// Set values
 			do init_value(myself, request_time);
-			
+	
 			// Remaining speed
 			do goto on: road target: target speed: remaining_speed;
+		
 		}
-					
+
 		// Add car and time to travel
 		do add_request_time_car(car, (request_time + car.travel_time));
+		
+		
 	}
 
 	// Leave the road
@@ -181,11 +201,10 @@ species Road skills: [scheduling] {
 			}
 
 		} else {
-			// Do die
 			ask car {
+				// Do die
 				do die();
 			}
-
 		}
 
 	}
@@ -203,9 +222,9 @@ species Road skills: [scheduling] {
 			// Set values
 			do init_value(myself, request_time);
 		}
-					
+		
 		// Add car and time to travel
-		do add_request_time_car(car, (request_time + car.travel_time));
+		do add_request_time_car(car, (request_time + car.travel_time));			
 		
 		// If this is the first car
 		if length(cars) = 1 {
@@ -215,17 +234,17 @@ species Road skills: [scheduling] {
 	 
 	// Leave the road
 	action meso_leave (Car car, date request_time) {
-		
+
 		// Get first
 		if first(cars) != car {
-			write "Something wrong the car must be the first in the road";
+			write "Something wrong in meso_leave " + name + " at " + cycle + " car " + car;
 		}
 		
 		Road next_road <- end_node.out_road;
 		
 		// If there is another road
 		bool joinable <- end_node.get_accessibility();
-		if next_road != nil {			
+		if next_road != nil {		
 			// If joined
 			if joinable {
 				// Pop
@@ -261,17 +280,19 @@ species Road skills: [scheduling] {
 				}
 		
 				// Check and add car
-				do check_waiting(request_time);
-				
+				do check_waiting(request_time); 
+
+				// Do die
 				ask car {
-					do die();				
-				}	
+					do die();
+				}
+				
 			}
 		}
 	}
-	
+		
 	// End travel
-	action end_travel(Car car, date request_time) {
+	action end_travel(Car car, date request_time, bool from_signal <- false) {
 		if last_out = nil {
 			do meso_leave(car, request_time);
 		} else {
@@ -285,11 +306,11 @@ species Road skills: [scheduling] {
 				// If the signal date is equals to the actual step date then execute it directly
 				if signal_date = (starting_date + time) {
 					do meso_leave(car, request_time + (outflow_duration - delta));
-				} else {
+				} else if not from_signal {
 					do later the_action: meso_leave_signal at: request_time + (outflow_duration - delta) refer_to: car;					
 				}
 			}
-		}		
+		}
 	}
 
 	// Leave signal
@@ -311,7 +332,7 @@ species Road skills: [scheduling] {
 	}
 	
 	// Check first car
-	action check_first_agent (date request_time) {
+	action check_first_agent (date request_time, bool from_signal <- false) {		
 		if not empty(cars) {
 			Car car <- first(cars);
 			date end_road_date; 
@@ -322,13 +343,13 @@ species Road skills: [scheduling] {
 			}
 			
 			if end_road_date = request_time {
-				do end_travel(car, end_road_date);	
+				do end_travel(car, end_road_date, from_signal);	
 			}
 		}
 	}
 	
 	// Check first car
-	action check_and_schedule_first_agent (date request_time) {
+	action check_and_schedule_first_agent (date request_time) {		
 		if not empty(cars) {
 			Car car <- first(cars);
 			date end_road_date; 
@@ -362,21 +383,23 @@ species Road skills: [scheduling] {
 		
 	// Just the current capacity
 	bool has_capacity {
-		return (current_capacity >= car_size + car_spacing); 
+		if micro_model {
+			return (current_capacity >= car_size + car_spacing) and (not car_is_crossing);			
+		} else {
+			return (current_capacity >= car_size + car_spacing);
+		}
 	}
 
 	// Notify as in road
 	action in_notify(date request_time) {
-		if end_node.out_road = nil {
-			do check_first_agent(request_time);			
+		if not micro_model and end_node.out_road = nil {
+			do check_first_agent(request_time, true);			
 		}
 	}
 	
 	// Notify as out road
 	action out_notify(date request_time) {
-		if not micro_model {
-			do add_waiting_agents(request_time);
-		}
+		do add_waiting_agents(request_time);
 	}
 	
 	/**
@@ -411,7 +434,7 @@ species Road skills: [scheduling] {
 	action remove_car (Car car, date request_time) {
 		Car first <- pop(cars);
 		if first != car {
-			write "Something wrong in remove car";
+			write "Something wrong in remove_car " + name + " at " + cycle + " car " + car;
 		}
 		remove key: car from: request_times;
 		last_out <- request_time;

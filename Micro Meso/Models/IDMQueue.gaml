@@ -6,6 +6,7 @@
 */
 model IDMQueue
 
+import "Utilities/Logger.gaml"
 import "Utilities/EventManager.gaml"
 import "Utilities/Global.gaml"
 import "Utilities/Logbook.gaml"
@@ -16,7 +17,7 @@ import "Species/Car.gaml"
 /** 
  * Setup the world
  */
-global skills: [logging] {
+global {
 	/**
 	 * Global param
 	 */
@@ -31,10 +32,7 @@ global skills: [logging] {
 	float seed <- 424242.0;
 	
 	// Cars generator rate (+1 => arithmetic error if value is 0)
-	int generate_frequency <- 50 update: rnd(0, 500) + 1;
-	
-	// The logbook
-	agent logbook;
+	int generate_frequency <- 50 update: rnd(0, 250) + 1;
 
 	/**
 	 * Geometry of the world
@@ -72,22 +70,6 @@ global skills: [logging] {
 	reflex generate when: ((cycle mod generate_frequency) = 0) and (Crossroad[0].get_accessibility()) {
 		do create_toy_car(full_network, Road[0], Crossroad[3].location);
 	}
-
-	// Log data
-	reflex log_data when: logbook_activated {		
-		// For each road
-		loop road over: Road {			
-			// For each car
-			loop car over: road.cars {			
-				// Write time/distance: [CarYYY, location/speed, time, car.location/speed]
-				do log_plot_2d section: car.name entry: "location" x: string(time) y: string(car.final_location_in_road);
-				
-				// Write speed
-				do log_plot_2d section: car.name entry: "speed" x: string(time) y: string(car.speed);
-				
-			}				
-		}
-	}
 	
 	/**
 	 * Init
@@ -97,7 +79,7 @@ global skills: [logging] {
 	init {
 		// Create logbook
 		create Logbook;
-		logbook <- Logbook[0];
+		do create_logger(Logbook[0]);
 		
 		// Create event manager
 		create EventManager;
@@ -105,21 +87,25 @@ global skills: [logging] {
 		// Create crossroads
 		write "Crossroad...";
 		do create_toy_crossroad(start_location);
-		do create_toy_light_crossroad(second_location, 333);
-		do create_toy_light_crossroad(third_location, 666);
-		do create_toy_light_crossroad(end_location, 999);
+		do create_toy_light_crossroad(second_location, 1000000);
+		do create_toy_light_crossroad(third_location, 1000000);
+		do create_toy_light_crossroad(end_location, 1200);
 		write "-> " + now;
 
 		// Create roads
 		write "Road...";
-		do create_toy_road(0, 1);
-		do create_toy_road(1, 2);
-		do create_toy_road(2, 3);
+		bool micro <- false;
+		do create_toy_road(0, 1, micro);
+		do create_toy_road(1, 2, true);
+		do create_toy_road(2, 3, micro);
 		write "-> " + now;
 
 		// Create network	
 		write "Graph...";
-		full_network <- as_edge_graph(Road, 1);
+		full_network <- directed(as_edge_graph(Road, Crossroad));
+		ask Crossroad {
+			do setup();	
+		}
 		write "-> " + now;
 	}
 
@@ -131,31 +117,39 @@ global skills: [logging] {
  
 // Main experiment
 experiment "IDM Event Queue" type: gui {
+	
 	// Car param
 	parameter "Max view length" var: car_max_view_length category: "Car";
 	parameter "Max view width" var: car_max_view_width category: "Car";
 	parameter "Draw sensing" var: car_draw_sensing category: "Car";
+	parameter "Max speed" var: car_max_speed category: "Car";
+	parameter "Spacing" var: car_spacing category: "Car";
+	parameter "Size" var: car_size category: "Car";
 	
 	// IDM param
-	parameter "Max speed" var: car_max_speed category: "IDM";
-	parameter "Size" var: car_size category: "IDM";
 	parameter "Max acceleration" var: car_max_acceleration category: "IDM";
 	parameter "Max break" var: car_max_break category: "IDM";
 	parameter "Reaction time" var: car_reaction_time category: "IDM";
-	parameter "Spacing" var: car_spacing category: "IDM";
 	parameter "Delta" var: car_delta category: "IDM";
-	
-	// Road param
+
+	// Road	
 	parameter "Road max speed" var: road_max_speed category: "Road";
+
+	// Queue road param
+	parameter "Vehicule per minutes" var: road_vehicule_per_minutes category: "Queue road";
+	parameter "BPR alpha" var: road_alpha category: "Queue road";
+	parameter "BPR beta" var: road_beta category: "Queue road";
+	parameter "BPR gamma" var: road_gamma category: "Queue road";
 	
 	// Logbook param
 	parameter "Logbook file path" var: logbook_file_path category: "Logbook";
 	parameter "Logbook cycle threshold" var: logbook_cycle_threshold category: "Logbook";
 	parameter "Logbook force write" var: logbook_write_data category: "Logbook";
-	parameter "Logbook activated" var: logbook_activated category: "Logbook";
 	parameter "Logbook cyclic activated" var: logbook_cycle_activated category: "Logbook";
 	parameter "Logbook flush" var: logbook_flush category: "Logbook";
+	parameter "Logger activated" var: logger_activated category: "Logbook";
 	
+	// Output
 	output {
 		display main_window type: opengl {
 			species Road;
