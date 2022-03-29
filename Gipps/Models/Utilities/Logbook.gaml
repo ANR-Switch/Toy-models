@@ -38,7 +38,7 @@ global {
 /** 
  * Logbook species
  */
-species Logbook skills: [logging_book] {
+species Logbook skills: [logging] {
 	/**
 	 * Reflex
 	 */

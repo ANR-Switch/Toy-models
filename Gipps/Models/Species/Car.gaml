@@ -276,7 +276,7 @@ species Car skills: [moving] {
 	aspect default {
 		draw shape color: #grey border: #black;
 		if car_draw_sensing {
-			draw sensing_zone border: #blue empty: true;
+			draw sensing_zone border: #blue wireframe: true;
 		}
 
 	}

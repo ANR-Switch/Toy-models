@@ -248,7 +248,7 @@ species Road skills: [scheduling] {
 			// If joined
 			if joinable {
 				// Pop
-				Car car <- pop_car(request_time);
+				car <- pop_car(request_time);
 				
 				// Update capacity
 				ask car {
@@ -271,7 +271,7 @@ species Road skills: [scheduling] {
 		} else {
 			if joinable {
 				// Pop
-				Car car <- pop_car(request_time);
+				car <- pop_car(request_time);
 				
 				// Update capacity
 				ask car {
