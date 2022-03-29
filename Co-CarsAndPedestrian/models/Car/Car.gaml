@@ -231,7 +231,7 @@ species car skills: [moving] {
 		draw shape color: #red;
 		if true {
 			// Draw the effect zone used in "following behavior"
-			draw sensing_zone color: #darkcyan empty: true;
+			draw sensing_zone color: #darkcyan wireframe: true;
 			// Draw speed
 			draw line(location, location + (direction.y * speed)) color: #green;
 		}

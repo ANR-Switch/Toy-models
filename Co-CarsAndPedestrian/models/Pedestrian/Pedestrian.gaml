@@ -141,7 +141,7 @@ species person skills: [moving] {
 		draw shape color: #blue;
 		
 		if(false) {
-			draw sensing_zone color: #darkcyan empty: true;
+			draw sensing_zone color: #darkcyan wireframe: true;
 			float distance <- location distance_to target;
 			point direction <- {(target.x - location.x) / distance, (target.y - location.y) / distance};
 			draw line(location, location + (direction * speed)) color: #green;
